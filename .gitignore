@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+data/
+config.toml
+dist/
+build/
+*.egg-info/
+.DS_Store
+*.spec
+.python-version
+.playwright-mcp/

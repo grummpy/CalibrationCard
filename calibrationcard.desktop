@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CalibrationCard
+GenericName=Classifier calibration report card
+Comment=Grade how trustworthy a classifier's confidence scores are
+Exec=bash -c 'cd "$(dirname "$1")" && exec ./launch.sh' bash %k
+Icon=assets/icon.png
+Terminal=true
+Categories=Science;Education;
+StartupNotify=true
