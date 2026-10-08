@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CalibrationCard</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <img src="/static/icon.svg" alt="" class="logo">
+  <div>
+    <h1>CalibrationCard</h1>
+    <p class="sub">A report card for your classifier's confidence. When it says 80%, is it right 80% of the time?</p>
+  </div>
+  <span class="badge">Runs on this computer only</span>
+</header>
+
+<main>
+<section class="panel" id="load">
+  <h2>1. Load predictions</h2>
+  <p class="hint">A CSV with the true label and one probability column per class (for example <code>label, p_cat, p_dog</code>),
+    or a binary label with one score column (<code>y_true, score</code>).</p>
+  <div class="row">
+    <label class="drop" id="drop"><input type="file" id="file" accept=".csv,text/csv"><span>Drop a CSV here or click to choose</span></label>
+    <div class="or">or</div>
+    <div class="grow"><input id="path" placeholder="/path/to/predictions.csv"><button id="open-path">Open path</button></div>
+    <div class="or">or</div>
+    <button id="demo">Try the demo</button>
+  </div>
+  <div id="load-status" class="status"></div>
+</section>
+
+<section class="panel hidden" id="map">
+  <h2>2. Check the columns</h2>
+  <div class="cols">
+    <label>True label column <select id="label-col"></select></label>
+    <label>Bins <input id="bins" type="number" min="5" max="50" value="15"></label>
+    <label id="pos-wrap" class="hidden">Positive class <input id="positive" placeholder="1"></label>
+    <label class="check"><input type="checkbox" id="recal" checked> Try temperature, Platt and isotonic recalibration</label>
+  </div>
+  <div>Probability columns:</div>
+  <div id="prob-cols" class="chips"></div>
+  <div class="table-wrap"><table id="head"></table></div>
+  <button id="grade" class="primary">Grade it</button>
+  <span id="grade-status" class="status"></span>
+</section>
+
+<section class="panel hidden" id="result">
+  <div class="result-head">
+    <div class="grade" id="grade-letter">?</div>
+    <div class="grow">
+      <h2 id="headline"></h2>
+      <div id="numbers" class="numbers"></div>
+    </div>
+    <div class="downloads">
+      <a id="dl-html" class="btn">Report (HTML)</a>
+      <a id="dl-pdf" class="btn">Report (PDF)</a>
+      <a id="dl-json" class="btn">All metrics (JSON)</a>
+    </div>
+  </div>
+  <iframe id="report" title="Report card"></iframe>
+</section>
+</main>
+<footer>CalibrationCard <span id="version"></span> · 127.0.0.1 only · your CSV never leaves this computer</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>
