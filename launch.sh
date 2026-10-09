@@ -23,8 +23,12 @@ if [[ -z "$PY" ]]; then
 fi
 
 if [[ ! -x .venv/bin/python ]]; then
-  echo "First run: creating a virtual environment and installing pinned packages..."
+  echo "First run: creating a virtual environment..."
   "$PY" -m venv .venv
+fi
+
+if ! .venv/bin/python -c 'import flask, numpy, pandas, scipy, sklearn, calibrationcard' >/dev/null 2>&1; then
+  echo "Installing or recovering pinned CalibrationCard dependencies..."
   .venv/bin/python -m pip install --upgrade pip
   .venv/bin/python -m pip install -r requirements.txt
   .venv/bin/python -m pip install -e . --no-deps

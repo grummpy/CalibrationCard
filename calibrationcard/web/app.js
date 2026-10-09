@@ -1,7 +1,7 @@
 "use strict";
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const COLORS = { A: "#2e7d5b", B: "#4f8a3a", C: "#c98a16", D: "#d0662b", F: "#d64541" };
+const COLORS = { A: "#2e7d5b", B: "#4f8a3a", C: "#c98a16", D: "#d0662b", F: "#d64541", I: "#5e6b78" };
 let upload = null;
 
 async function api(path, opts = {}) {
