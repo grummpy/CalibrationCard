@@ -24,6 +24,12 @@ def test_launcher_files_exist_and_point_at_the_module():
     assert b"\r\n" in windows.read_bytes()
 
 
+def test_linux_launcher_recovers_dependencies_from_an_existing_venv():
+    text = (ROOT / "launch.sh").read_text(encoding="utf-8")
+    assert "import flask, numpy, pandas, scipy, sklearn, calibrationcard" in text
+    assert "Installing or recovering pinned CalibrationCard dependencies" in text
+
+
 def test_icons_and_cover_exist():
     for name in ("icon.svg", "icon.png", "icon-512.png", "icon-1024.png", "icon.icns", "icon.ico"):
         assert (ROOT / "assets" / name).is_file(), name

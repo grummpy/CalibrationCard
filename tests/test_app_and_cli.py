@@ -1,6 +1,7 @@
 import json
 import threading
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -54,6 +55,11 @@ def test_demo_route(tmp_path):
     up = client.post("/api/upload", json={"demo": True}).get_json()
     res = client.post("/api/analyze", json={"upload_id": up["upload_id"]}).get_json()
     assert res["headline"]["grade"][0] in "CDF"
+
+
+def test_web_incomplete_grade_has_a_neutral_color_mapping():
+    script = (Path(__file__).resolve().parents[1] / "calibrationcard" / "web" / "app.js").read_text(encoding="utf-8")
+    assert 'I: "#5e6b78"' in script
 
 
 @pytest.mark.skipif(find_browser() is None, reason="needs Chrome, Chromium or Edge for PDF")
