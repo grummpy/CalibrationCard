@@ -93,10 +93,16 @@ def render_html(result: dict, *, generated: datetime | None = None) -> str:
     if held_out_protocol:
         selection = recal["selection"]
         final = recal["final_evaluation"]
-        recalibration_heading = (f"Recalibration final evaluation (method selected on {selection['rows']:,} rows; "
-                                 f"evaluated on {final['rows']:,} untouched rows)")
-        recalibration_note = ("The final-evaluation labels were not used to select a method. Candidate details and "
-                              "class counts are retained in the JSON evidence export.")
+        if recal.get("best"):
+            recalibration_heading = (f"Recalibration final evaluation (method selected on {selection['rows']:,} rows; "
+                                     f"evaluated on {final['rows']:,} untouched rows)")
+            recalibration_note = ("The final-evaluation labels were not used to select a method. Candidate details and "
+                                  "class counts are retained in the JSON evidence export.")
+        else:
+            recalibration_heading = (f"Recalibration final evaluation (no calibrator selected using {selection['rows']:,} rows; "
+                                     f"raw model evaluated on {final['rows']:,} untouched rows)")
+            recalibration_note = ("No calibrator was selected. The untouched final-evaluation labels were not used to "
+                                  "choose a method; selection details and class counts remain in the JSON evidence export.")
     else:
         recalibration_heading = f"Candidate recalibration comparison (cross-fitted on {folds} folds)"
         recalibration_note = ("Candidate scores select a method; they are not a final performance claim. Use the "
