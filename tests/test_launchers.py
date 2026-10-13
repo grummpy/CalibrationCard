@@ -59,6 +59,8 @@ printf '%s\\n' \"$*\" >> \"$CALIBRATIONCARD_FAKE_LOG\"
 exit 0
 """, encoding="utf-8")
     fake_python.chmod(0o755)
+    for name in ("python3.13", "python3.12", "python3.11", "python"):
+        (fake_bin / name).symlink_to(fake_python.name)
     if existing_venv:
         partial_python = tmp_path / ".venv" / "bin" / "python"
         partial_python.parent.mkdir(parents=True)

@@ -77,7 +77,7 @@ def test_final_evaluation_keeps_selection_labels_separate_and_records_provenance
     html = render_html(result)
     assert "Recalibration final evaluation" in html
     assert "final-evaluation labels were not used to select a method" in html
-    assert "Evidence: input" in html and "revision unavailable" in html
+    assert "Evidence: input" in html and " · revision " in html
 
 
 def test_final_evaluation_refuses_an_unsafe_fraction():
