@@ -69,7 +69,7 @@ def test_wide_class_labels_are_preserved_in_accessible_print_and_narrow_html(tmp
     rows = 120
     labels = [classes[index % len(classes)] for index in range(rows)]
     frame = pd.DataFrame({"label": labels})
-    for number, name in enumerate(classes):
+    for name in classes:
         frame[f"prob_{name}"] = [0.7 if label == name else 0.1 for label in labels]
     path = tmp_path / "wide.csv"
     frame.to_csv(path, index=False)
