@@ -112,15 +112,16 @@ def class_bars(classwise: list[dict], *, width=420, height=None, title="Per-clas
     pad_l, pad_r, pad_t = 110, 50, 26
     pw = width - pad_l - pad_r
     top = max([r["ece"] for r in rows] + [0.05])
-    parts = [f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" '
-             f'font-family="system-ui, -apple-system, Segoe UI, sans-serif">',
+    parts = [f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" role="img" '
+             f'aria-label="{escape(title)}" font-family="system-ui, -apple-system, Segoe UI, sans-serif">',
              f'<text x="0" y="16" font-size="13" font-weight="600" fill="{INK}">{escape(title)}</text>']
     for i, r in enumerate(rows):
         yy = pad_t + i * 18
         w = r["ece"] / top * pw
         color = class_color(r)
         label = r["class"] if len(r["class"]) <= 16 else r["class"][:15] + "…"
-        parts.append(f'<text x="{pad_l - 6}" y="{yy + 11}" font-size="11" fill="{INK}" text-anchor="end">{escape(label)}</text>')
+        parts.append(f'<text x="{pad_l - 6}" y="{yy + 11}" font-size="11" fill="{INK}" text-anchor="end">'
+                     f'<title>{escape(r["class"])}</title>{escape(label)}</text>')
         parts.append(f'<rect x="{pad_l}" y="{yy + 2}" width="{max(w, 1):.2f}" height="12" rx="2" fill="{color}"/>')
         parts.append(f'<text x="{pad_l + max(w, 1) + 4:.2f}" y="{yy + 12}" font-size="10" fill="{MUTED}">{r["ece"]:.1%}</text>')
     parts.append(f'<text x="{pad_l}" y="{height - 4}" font-size="10" fill="{MUTED}">red = over-predicted, blue = '

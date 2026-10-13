@@ -89,6 +89,23 @@ def render_html(result: dict, *, generated: datetime | None = None) -> str:
     color = grade_color(g["letter"])
     title = escape(result.get("name", "predictions"))
     folds = recal.get("folds", 2)
+    held_out_protocol = recal.get("protocol") == "held-out-final-evaluation"
+    if held_out_protocol:
+        selection = recal["selection"]
+        final = recal["final_evaluation"]
+        recalibration_heading = (f"Recalibration final evaluation (method selected on {selection['rows']:,} rows; "
+                                 f"evaluated on {final['rows']:,} untouched rows)")
+        recalibration_note = ("The final-evaluation labels were not used to select a method. Candidate details and "
+                              "class counts are retained in the JSON evidence export.")
+    else:
+        recalibration_heading = f"Candidate recalibration comparison (cross-fitted on {folds} folds)"
+        recalibration_note = ("Candidate scores select a method; they are not a final performance claim. Use the "
+                              "CLI final-evaluation option to reserve untouched rows.")
+    provenance = result.get("provenance") or {}
+    revision = provenance.get("source_revision", "unavailable")
+    input_hash = provenance.get("input_sha256", "unavailable")
+    config_hash = provenance.get("configuration_sha256", "unavailable")
+    evidence_line = f"Evidence: input {input_hash[:12]} · config {config_hash[:12]} · revision {revision}"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>CalibrationCard · {title}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -97,7 +114,7 @@ def render_html(result: dict, *, generated: datetime | None = None) -> str:
 * {{ box-sizing: border-box; }}
 body {{ margin: 0; background: #efe8d8; font: 11.5px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; color: #1f2a44; }}
 .card {{ max-width: 8.1in; margin: 18px auto; background: #fbf6ea; border: 1px solid #e0d6bf; border-radius: 14px;
-  padding: 20px 24px; box-shadow: 0 8px 30px rgba(60,40,10,.12); }}
+  padding: 20px 24px; box-shadow: 0 8px 30px rgba(60,40,10,.12); overflow-wrap: anywhere; }}
 header {{ display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #1f2a44; padding-bottom: 10px; }}
 header img {{ width: 40px; height: 40px; }}
 header h1 {{ font-size: 20px; margin: 0; }} header .meta {{ margin-left: auto; text-align: right; color: #6b6f80; font-size: 11px; }}
@@ -115,6 +132,9 @@ td.v {{ font-weight: 700; white-space: nowrap; }} td.h {{ color: #6b6f80; font-s
 h2 {{ font-size: 13px; margin: 6px 0 4px; }}
 svg {{ width: 100%; height: auto; }}
 footer {{ margin-top: 10px; color: #6b6f80; font-size: 10px; display: flex; justify-content: space-between; gap: 10px; }}
+.protocol-note {{ color: #515d75; font-size: 10px; margin: 0 0 4px; }}
+@media screen and (max-width: 680px) {{ .card {{ margin: 0; border-radius: 0; padding: 14px; }} .top, .grid {{ grid-template-columns: 1fr; }}
+  .grade {{ margin: auto; }} header .meta {{ margin-left: 0; text-align: left; }} footer {{ display: block; }} footer span {{ display: block; margin-top: 4px; }} }}
 @media print {{ body {{ background: #fff; }} .card {{ box-shadow: none; border: 0; margin: 0; padding: 0; max-width: none;
   zoom: 0.94; }} .grid, section, footer {{ break-inside: avoid; }} }}
 </style></head>
@@ -130,9 +150,9 @@ Generated {generated:%Y-%m-%d %H:%M} · v{__version__}</div></header>
 <div>{hist}</div>
 <div>{classes}</div>
 </section>
-<section><h2>Recalibration (cross-fitted on {folds} folds, scored only on rows each calibrator never saw)</h2>
+<section><h2>{recalibration_heading}</h2><p class="protocol-note">{recalibration_note}</p>
 <table><tr><th>Method</th><th>ECE</th><th>Brier</th><th>Log loss</th></tr>{recal_rows}</table></section>
-<footer><span>Grade scale (ECE): {scale}</span><span>Made locally. Your predictions never left this computer.</span></footer>
+<footer><span>Grade scale (ECE): {scale}</span><span>{escape(evidence_line)}</span><span>Made locally. Your predictions never left this computer.</span></footer>
 </div></body></html>"""
 
 

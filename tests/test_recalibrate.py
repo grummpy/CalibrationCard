@@ -3,7 +3,8 @@ import numpy as np
 from calibrationcard.analysis import analyze
 from calibrationcard.demo import synthetic_binary, synthetic_predictions
 from calibrationcard.loader import load_predictions
-from calibrationcard.recalibrate import Temperature, compare, cross_fit
+from calibrationcard.recalibrate import Temperature, compare, cross_fit, held_out_final_evaluation
+from calibrationcard.report import render_html
 
 
 def test_temperature_recovers_sharpening():
@@ -54,3 +55,32 @@ def test_no_mistakes_means_no_recalibration_advice():
     result = analyze(load_predictions(pd.DataFrame({"y": y, "score": score})))
     assert result["recalibration"]["skipped"].startswith("Recalibration skipped")
     assert result["metrics"]["errors"] == 0
+
+
+def test_final_evaluation_keeps_selection_labels_separate_and_records_provenance():
+    pred = load_predictions(synthetic_predictions(n=600, seed=12))
+    result = analyze(pred, methods=("temperature",), seed=7, final_evaluation_fraction=0.25)
+    recal = result["recalibration"]
+    assert recal["protocol"] == "held-out-final-evaluation"
+    assert recal["selection"]["rows"] + recal["final_evaluation"]["rows"] == pred.n
+    assert recal["selection"]["candidate_comparison"]["best"] == "temperature"
+    assignments = recal["selection"]["candidate_comparison"]["methods"][0]["params"]["fold_assignments"]
+    assert len(assignments) == recal["selection"]["rows"] and set(assignments) == {0, 1}
+    assert set(recal["selection"]["row_indexes"]).isdisjoint(recal["final_evaluation"]["row_indexes"])
+    assert recal["final_evaluation"]["selected_method"] == "temperature"
+    assert recal["final_evaluation"]["raw"]["n"] == recal["final_evaluation"]["rows"]
+    assert "not used to select it" in " ".join(result["grade"]["notes"])
+    provenance = result["provenance"]
+    assert len(provenance["input_sha256"]) == 64
+    assert len(provenance["configuration_sha256"]) == 64
+    assert provenance["class_order"] == pred.classes
+    html = render_html(result)
+    assert "Recalibration final evaluation" in html
+    assert "final-evaluation labels were not used to select a method" in html
+    assert "Evidence: input" in html and " · revision " in html
+
+
+def test_final_evaluation_refuses_an_unsafe_fraction():
+    pred = load_predictions(synthetic_binary(n=100))
+    with np.testing.assert_raises_regex(ValueError, "between 0.10 and 0.50"):
+        held_out_final_evaluation(pred, methods=("temperature",), final_fraction=0.05)
