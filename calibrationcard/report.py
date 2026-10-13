@@ -32,7 +32,7 @@ def _icon_data_uri() -> str:
 
 
 def grade_color(letter: str) -> str:
-    return {"A": GREEN, "B": "#4f8a3a", "C": "#c98a16", "D": "#d0662b", "F": RED, "I": "#7a8094"}.get(letter[:1], RED)
+    return {"A": GREEN, "B": "#4f8a3a", "C": "#c98a16", "D": "#d0662b", "F": RED, "I": "#5e6b78"}.get(letter[:1], RED)
 
 
 def render_html(result: dict, *, generated: datetime | None = None) -> str:
