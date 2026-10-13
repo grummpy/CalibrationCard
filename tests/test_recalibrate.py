@@ -80,6 +80,17 @@ def test_final_evaluation_keeps_selection_labels_separate_and_records_provenance
     assert "Evidence: input" in html and " · revision " in html
 
 
+def test_final_evaluation_does_not_claim_selection_when_candidates_are_skipped():
+    pred = load_predictions(synthetic_predictions(n=600, seed=12))
+    result = analyze(pred, methods=(), seed=7, final_evaluation_fraction=0.25)
+    recal = result["recalibration"]
+    assert recal["protocol"] == "held-out-final-evaluation"
+    assert recal["best"] is None
+    html = render_html(result)
+    assert "no calibrator selected using" in html
+    assert "method selected on" not in html
+
+
 def test_final_evaluation_refuses_an_unsafe_fraction():
     pred = load_predictions(synthetic_binary(n=100))
     with np.testing.assert_raises_regex(ValueError, "between 0.10 and 0.50"):

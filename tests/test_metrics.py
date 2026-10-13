@@ -4,7 +4,7 @@ from calibrationcard.demo import synthetic_predictions
 from calibrationcard.grade import letter
 from calibrationcard.loader import load_predictions
 from calibrationcard.metrics import adaptive_bins, brier, evaluate, log_loss, reliability_bins, top_label
-from calibrationcard.reliability_study import run_grade_reliability_study
+from calibrationcard.reliability_study import _grade_summary, run_grade_reliability_study
 
 
 def test_perfectly_calibrated_binary_has_low_ece():
@@ -122,5 +122,13 @@ def test_synthetic_grade_reliability_study_discloses_conditions_and_uncertainty(
     assert len(study["operating_characteristics"]) == 2
     small = [row for row in study["conditions"] if row["rows"] == 50]
     assert all(row["incomplete_rate"] == 1.0 for row in small)
-    assert all(len(row["mean_ece_90_percent_interval"]) == 2 for row in study["conditions"])
-    assert set(study["definitions"]) == {"false_alarm_rate", "missed_gap_rate", "incomplete_rate"}
+    assert all(len(row["mean_ece_90_percent_bootstrap_interval"]) == 2 for row in study["conditions"])
+    assert set(study["definitions"]) == {
+        "false_alarm_rate", "missed_gap_rate", "incomplete_rate", "mean_ece_90_percent_bootstrap_interval"
+    }
+
+
+def test_synthetic_grade_reliability_bootstraps_the_trial_mean_not_trial_intervals():
+    summary = _grade_summary(["A", "A", "A"], [0.0, 1.0, 1.0], rng=np.random.default_rng(7))
+    low, high = summary["mean_ece_90_percent_bootstrap_interval"]
+    assert low < summary["mean_ece"] < high

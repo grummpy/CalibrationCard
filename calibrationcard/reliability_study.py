@@ -41,15 +41,24 @@ def _synthetic_case(rng, rows: int, prevalence: float, condition: str) -> Predic
                        label_column="synthetic_label", prob_columns=["synthetic_score"])
 
 
-def _grade_summary(grades: list[str], eces: list[float], intervals: list[list[float]]) -> dict:
+def _mean_ece_bootstrap_interval(eces: list[float], *, rng, rounds: int = 2_000) -> list[float]:
+    """Return a 90% bootstrap interval for the mean ECE across synthetic trials."""
+    values = np.asarray(eces, dtype=float)
+    if len(values) == 1:
+        return [float(values[0]), float(values[0])]
+    samples = values[rng.integers(0, len(values), size=(rounds, len(values)))].mean(axis=1)
+    low, high = np.percentile(samples, [5, 95])
+    return [float(low), float(high)]
+
+
+def _grade_summary(grades: list[str], eces: list[float], *, rng) -> dict:
     counts = Counter(item[0] for item in grades)
     return {
         "trials": len(grades),
         "grade_counts": dict(sorted(counts.items())),
         "incomplete_rate": sum(item.startswith("I") for item in grades) / len(grades),
         "mean_ece": float(np.mean(eces)),
-        "mean_ece_90_percent_interval": [float(np.mean([item[0] for item in intervals])),
-                                         float(np.mean([item[1] for item in intervals]))],
+        "mean_ece_90_percent_bootstrap_interval": _mean_ece_bootstrap_interval(eces, rng=rng),
     }
 
 
@@ -75,7 +84,6 @@ def run_grade_reliability_study(*, sample_sizes=(50, 100, 300, 1000), prevalence
                 for condition in ("calibrated", "sharpened"):
                     grades: list[str] = []
                     eces: list[float] = []
-                    intervals: list[list[float]] = []
                     for _ in range(trials):
                         pred = _synthetic_case(root_rng, int(n), float(prevalence), condition)
                         metrics = evaluate(pred.proba, pred.y, pred.classes, pred.binary, n_bins=int(bins),
@@ -84,8 +92,7 @@ def run_grade_reliability_study(*, sample_sizes=(50, 100, 300, 1000), prevalence
                         card = grade(metrics, None, pred.summary())
                         grades.append(card["letter"])
                         eces.append(metrics["ece"])
-                        intervals.append(metrics.get("ece_interval", [metrics["ece"], metrics["ece"]]))
-                    summary = _grade_summary(grades, eces, intervals)
+                    summary = _grade_summary(grades, eces, rng=root_rng)
                     summary.update({"condition": condition, "rows": int(n), "target_prevalence": float(prevalence),
                                     "bins": int(bins)})
                     rows.append(summary)
@@ -107,6 +114,7 @@ def run_grade_reliability_study(*, sample_sizes=(50, 100, 300, 1000), prevalence
             "false_alarm_rate": "Calibrated synthetic run receives C, D, or F.",
             "missed_gap_rate": "Deliberately sharpened synthetic run receives A or B.",
             "incomplete_rate": "Run receives I because evidence is intentionally insufficient.",
+            "mean_ece_90_percent_bootstrap_interval": "Percentile bootstrap interval for the mean trial ECE.",
         },
         "conditions": rows,
         "operating_characteristics": pair_rows,
