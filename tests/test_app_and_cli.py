@@ -52,6 +52,39 @@ def test_upload_analyze_and_report(tmp_path):
     assert bad.status_code == 400
 
 
+def test_pdf_unavailable_keeps_the_local_html_fallback_explicit(monkeypatch, tmp_path):
+    monkeypatch.setattr("calibrationcard.app.find_browser", lambda: None)
+    monkeypatch.setattr("calibrationcard.report.find_browser", lambda: None)
+    client = create_app(data_dir=tmp_path).test_client()
+    assert client.get("/api/meta").get_json()["pdf"] is False
+    up = client.post("/api/upload", json={"demo": True}).get_json()
+    result = client.post("/api/analyze", json={"upload_id": up["upload_id"]}).get_json()
+    fallback = client.get(f"/api/report/{result['result_id']}.pdf")
+    assert fallback.status_code == 501
+    assert "Open the HTML report and use Print" in fallback.get_json()["error"]
+
+
+def test_wide_class_labels_are_preserved_in_accessible_print_and_narrow_html(tmp_path):
+    classes = [f"A deliberately long class label {number}" for number in range(4)]
+    rows = 120
+    labels = [classes[index % len(classes)] for index in range(rows)]
+    frame = pd.DataFrame({"label": labels})
+    for number, name in enumerate(classes):
+        frame[f"prob_{name}"] = [0.7 if label == name else 0.1 for label in labels]
+    path = tmp_path / "wide.csv"
+    frame.to_csv(path, index=False)
+    client = create_app(data_dir=tmp_path).test_client()
+    upload = client.post("/api/upload", json={"path": str(path)}).get_json()
+    result = client.post("/api/analyze", json={
+        "upload_id": upload["upload_id"], "label": "label", "prob_columns": list(frame.columns[1:]),
+        "recalibrate": False,
+    }).get_json()
+    html = client.get(f"/api/report/{result['result_id']}.html").get_data(as_text=True)
+    assert "@media print" in html and "@media screen and (max-width: 680px)" in html
+    assert 'role="img" aria-label="Per-class calibration error"' in html
+    assert all(name in html for name in classes)
+
+
 def test_demo_route(tmp_path):
     client = create_app(data_dir=tmp_path).test_client()
     up = client.post("/api/upload", json={"demo": True}).get_json()
@@ -119,3 +152,18 @@ def test_cli_grade_and_demo(tmp_path, capsys):
     assert html.read_text().startswith("<!doctype html>")
     assert json.loads(js.read_text())["settings"]["bins"] == 10
     assert main(["grade", str(tmp_path / "missing.csv")]) == 2
+
+
+def test_cli_writes_synthetic_study_and_final_evaluation_evidence(tmp_path, capsys):
+    demo = tmp_path / "demo.csv"
+    assert main(["demo", str(demo)]) == 0
+    evaluated = tmp_path / "evaluated.json"
+    assert main(["grade", str(demo), "--methods", "temperature", "--final-evaluation-fraction", "0.2",
+                 "--json", str(evaluated)]) == 0
+    exported = json.loads(evaluated.read_text())
+    assert exported["recalibration"]["protocol"] == "held-out-final-evaluation"
+    assert exported["provenance"]["class_order"]
+    study = tmp_path / "study.json"
+    assert main(["study", str(study), "--trials", "1", "--seed", "4"]) == 0
+    assert json.loads(study.read_text())["synthetic_only"]
+    assert "synthetic grade-reliability study" in capsys.readouterr().out

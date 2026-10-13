@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import warnings
+from dataclasses import replace
 
 import numpy as np
 from scipy.optimize import minimize_scalar
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 
 from calibrationcard.metrics import count_errors, evaluate
 
@@ -118,15 +119,20 @@ def cross_fit(proba, y, method: str, folds: int = 2, seed: int = 0):
         raise ValueError("Each class needs at least 2 rows to cross-fit a calibrator.")
     out = np.zeros_like(proba)
     params = []
+    fold_assignments = np.full(len(y), -1, dtype=int)
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
-    for fit_idx, eval_idx in splitter.split(proba, y):
+    for fold, (fit_idx, eval_idx) in enumerate(splitter.split(proba, y)):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = MAKERS[method]().fit(proba[fit_idx], y[fit_idx])
         out[eval_idx] = model.transform(proba[eval_idx])
+        fold_assignments[eval_idx] = fold
         if method == "temperature":
             params.append(round(model.t, 4))
-    return out, {"folds": folds, "temperature": params} if method == "temperature" else {"folds": folds}
+    evidence = {"folds": folds, "fold_assignments": fold_assignments.tolist()}
+    if method == "temperature":
+        evidence["temperature"] = params
+    return out, evidence
 
 
 def compare(pred, methods=METHODS, folds: int = 2, seed: int = 0, n_bins: int = 15) -> dict:
@@ -167,3 +173,96 @@ def compare(pred, methods=METHODS, folds: int = 2, seed: int = 0, n_bins: int = 
         "best": best["method"] if best else None,
         "helps": bool(best and best["ece"] < base["ece"] * 0.8 and best["log_loss"] <= base["log_loss"] * 1.02),
     }
+
+
+def _subset(pred, index):
+    """Return a synthetic-safe slice while keeping the original class order and column metadata."""
+    return replace(pred, y=pred.y[index], proba=pred.proba[index], dropped_rows=0, renormalized_rows=0,
+                   notes=list(pred.notes))
+
+
+def _class_counts(pred) -> dict[str, int]:
+    counts = np.bincount(pred.y, minlength=len(pred.classes))
+    return {name: int(count) for name, count in zip(pred.classes, counts, strict=True)}
+
+
+def _result_metrics(metrics: dict) -> dict:
+    """Keep the report-relevant metric evidence without copying chart data into two protocol sections."""
+    keys = ("n", "ece", "adaptive_ece", "brier", "log_loss", "accuracy", "errors", "ece_interval")
+    return {key: metrics[key] for key in keys if key in metrics}
+
+
+def held_out_final_evaluation(pred, methods=METHODS, folds: int = 2, seed: int = 0, n_bins: int = 15,
+                              final_fraction: float = 0.2) -> dict:
+    """Select on one stratified partition and evaluate the selected calibrator on another.
+
+    Candidate cross-fitting remains useful selection evidence, but the final partition's labels are never used to
+    choose a method. This is opt-in because it trades report sample size for an untouched claim set.
+    """
+    if not 0.1 <= final_fraction <= 0.5:
+        raise ValueError("Final evaluation fraction must be between 0.10 and 0.50.")
+    counts = np.bincount(pred.y, minlength=pred.proba.shape[1])
+    if len(pred.y) < 40 or np.any(counts < 2):
+        raise ValueError("Final evaluation needs at least 40 rows and at least two rows in each class.")
+    splitter = StratifiedShuffleSplit(n_splits=1, test_size=final_fraction, random_state=seed)
+    try:
+        selection_idx, final_idx = next(splitter.split(pred.proba, pred.y))
+    except ValueError as exc:
+        raise ValueError(f"Could not create a stratified final evaluation: {exc}") from exc
+    selection_pred = _subset(pred, selection_idx)
+    final_pred = _subset(pred, final_idx)
+    selection = compare(selection_pred, methods=methods, folds=folds, seed=seed, n_bins=n_bins)
+    raw = evaluate(final_pred.proba, final_pred.y, final_pred.classes, final_pred.binary, n_bins=n_bins, seed=seed)
+    result = {
+        "protocol": "held-out-final-evaluation",
+        "folds": selection.get("folds", folds),
+        "final_fraction": final_fraction,
+        "selection": {
+            "rows": selection_pred.n,
+            "class_counts": _class_counts(selection_pred),
+            "row_indexes": selection_idx.tolist(),
+            "candidate_comparison": selection,
+        },
+        "final_evaluation": {
+            "rows": final_pred.n,
+            "class_counts": _class_counts(final_pred),
+            "row_indexes": final_idx.tolist(),
+            "raw": raw,
+        },
+        "before": _result_metrics(raw),
+        "methods": [],
+        "best": None,
+        "helps": False,
+    }
+    best_name = selection.get("best")
+    if not best_name:
+        result["skipped"] = ("No calibrator was selected on the selection partition; final-evaluation labels were not "
+                             "used to choose a method.")
+        return result
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = MAKERS[best_name]().fit(selection_pred.proba, selection_pred.y)
+    final_proba = model.transform(final_pred.proba)
+    after = evaluate(final_proba, final_pred.y, final_pred.classes, final_pred.binary, n_bins=n_bins, seed=seed)
+    params = {"fitted_rows": selection_pred.n}
+    if best_name == "temperature":
+        params["temperature"] = [round(model.t, 4)]
+    row = {
+        "method": best_name,
+        "label": LABELS[best_name],
+        "params": params,
+        "ece": after["ece"],
+        "adaptive_ece": after["adaptive_ece"],
+        "brier": after["brier"],
+        "log_loss": after["log_loss"],
+        "accuracy": after["accuracy"],
+        "bins": after["bins"],
+        "positive_bins": after.get("positive_bins"),
+    }
+    result.update({
+        "methods": [row],
+        "best": best_name,
+        "helps": bool(after["ece"] < raw["ece"] * 0.8 and after["log_loss"] <= raw["log_loss"] * 1.02),
+    })
+    result["final_evaluation"].update({"selected_method": best_name, "after": after})
+    return result

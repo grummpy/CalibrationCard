@@ -136,7 +136,8 @@ def noise_floor(conf: np.ndarray, n_bins: int, lower: float = 0.0, rounds: int =
 
 
 def evaluate(proba: np.ndarray, y: np.ndarray, classes: list[str], binary: bool, *, n_bins: int = 15,
-             seed: int = 0, bootstrap: bool = True) -> dict:
+             seed: int = 0, bootstrap: bool = True, bootstrap_rounds: int = 200,
+             noise_floor_rounds: int = 200) -> dict:
     n = len(y)
     conf, correct = top_label(proba, y)
     # Top-label confidence can never be below 1/k, so start the bins there.
@@ -166,11 +167,12 @@ def evaluate(proba: np.ndarray, y: np.ndarray, classes: list[str], binary: bool,
     if binary:
         # For a binary model the positive-class reliability curve is the standard view.
         result["positive_bins"] = cw[1]["bins"]
-    floor = noise_floor(conf, n_bins, lower=lower, seed=seed)
+    floor = noise_floor(conf, n_bins, lower=lower, rounds=noise_floor_rounds, seed=seed)
     result["ece_noise_floor"] = floor
     result["ece_excess"] = max(0.0, result["ece"] - floor)
     if bootstrap and n >= 10:
-        result["ece_interval"] = list(bootstrap_ece(conf, correct, n_bins, seed=seed, lower=lower))
+        result["ece_interval"] = list(bootstrap_ece(conf, correct, n_bins, rounds=bootstrap_rounds, seed=seed,
+                                                      lower=lower))
     return result
 
 

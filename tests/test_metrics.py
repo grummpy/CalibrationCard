@@ -4,6 +4,7 @@ from calibrationcard.demo import synthetic_predictions
 from calibrationcard.grade import letter
 from calibrationcard.loader import load_predictions
 from calibrationcard.metrics import adaptive_bins, brier, evaluate, log_loss, reliability_bins, top_label
+from calibrationcard.reliability_study import run_grade_reliability_study
 
 
 def test_perfectly_calibrated_binary_has_low_ece():
@@ -112,3 +113,14 @@ def test_error_count_wording():
     assert count_errors(0) == "no wrong predictions"
     assert count_errors(1) == "only 1 wrong prediction"
     assert count_errors(7) == "only 7 wrong predictions"
+
+
+def test_synthetic_grade_reliability_study_discloses_conditions_and_uncertainty():
+    study = run_grade_reliability_study(sample_sizes=(50, 100), prevalences=(0.5,), bin_counts=(10,), trials=3, seed=4)
+    assert study["synthetic_only"]
+    assert len(study["conditions"]) == 4
+    assert len(study["operating_characteristics"]) == 2
+    small = [row for row in study["conditions"] if row["rows"] == 50]
+    assert all(row["incomplete_rate"] == 1.0 for row in small)
+    assert all(len(row["mean_ece_90_percent_interval"]) == 2 for row in study["conditions"])
+    assert set(study["definitions"]) == {"false_alarm_rate", "missed_gap_rate", "incomplete_rate"}

@@ -55,9 +55,13 @@ Overconfidence only shows up through mistakes, so a model with almost no wrong a
 rather than an A it has not earned. The provisional letter is still shown in the notes. Each letter is split into
 + / plain / − thirds.
 
-Recalibration is **cross-fitted** (2 folds by default): each row is scored by a calibrator that never saw it, so
-the "after" numbers are honest. The recommended method is picked by log loss. It is skipped when there are fewer
-than 10 mistakes, because then a calibrator can only learn to be more certain.
+Recalibration candidate comparisons are **cross-fitted** (2 folds by default): each row is scored by a calibrator
+that never saw it. Those are selection results—the recommended method is picked by log loss from the same candidate
+comparison, so its displayed “after” score is not a final performance claim. To reserve an untouched final partition,
+use `--final-evaluation-fraction 0.2`. The JSON report records the split seed, class order, input/configuration
+hashes, dependency versions and source-revision identifier (or explicitly says when a revision identifier was not
+available). Recalibration is skipped when there are fewer than 10 mistakes, because then a calibrator can only learn
+to be more certain.
 
 ## Command line
 
@@ -65,8 +69,14 @@ than 10 mistakes, because then a calibrator can only learn to be more certain.
 .venv/bin/python -m calibrationcard grade predictions.csv --html report.html --pdf report.pdf --json metrics.json
 .venv/bin/python -m calibrationcard grade scores.csv --label y_true --prob-cols score --positive 1
 .venv/bin/python -m calibrationcard grade predictions.csv --bins 10 --methods temperature platt
+.venv/bin/python -m calibrationcard grade predictions.csv --final-evaluation-fraction 0.2 --json metrics.json
 .venv/bin/python -m calibrationcard demo demo.csv
+.venv/bin/python -m calibrationcard study synthetic-grade-study.json --trials 20
 ```
+
+`study` uses only generated labels and forecasts. It records grade distributions, bootstrap ECE ranges, false-alarm
+and missed-gap definitions across the declared sample sizes, target prevalences and bin counts. It does not establish
+a professional benchmark or replace evaluation on an appropriate untouched model test set.
 
 PDF export uses a local Chrome, Chromium or Edge in headless mode. Without one, open the HTML report and use
 **Print → Save as PDF**; it is laid out for one Letter page.
@@ -102,7 +112,8 @@ rule exist.
 
 ## Limitations
 
-- The macOS `.command` and Windows `.bat` launchers have not been run on a Mac or Windows PC yet. The Linux launcher has.
+- The macOS `.command` and Windows `.bat` launchers now use the same dependency-readiness check as Linux, but still
+  need supported-OS smoke evidence; Python CI cannot establish native bundle behavior.
 - ECE depends on the number of bins (15 by default, top-label, equal width from 1/k to 1). Adaptive ECE is shown too.
 - Multiclass Platt and isotonic are one-vs-rest followed by rescaling rows to sum to 1.
 - The grade bands are a convention, not a standard. Read the notes and the diagram, not just the letter.

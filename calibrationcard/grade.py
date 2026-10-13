@@ -94,13 +94,24 @@ def grade(metrics: dict, recal: dict | None, summary: dict) -> dict:
 
     if recal and recal.get("methods"):
         best = next((m for m in recal["methods"] if m["method"] == recal.get("best")), None)
-        if best and recal.get("helps"):
+        if best and recal.get("protocol") == "held-out-final-evaluation":
+            selection = recal["selection"]
+            final = recal["final_evaluation"]
+            final_range = final["raw"].get("ece_interval")
+            uncertainty = (f" The final ECE 90% bootstrap range is {pct(final_range[0])} to {pct(final_range[1])}."
+                           if final_range else "")
+            notes.append(f"{best['label']} was selected using cross-fitted candidate evidence from "
+                         f"{selection['rows']:,} rows. The {final['rows']:,} final-evaluation rows were not used "
+                         f"to select it. On that untouched evaluation, ECE is {pct(final['raw']['ece'])} raw and "
+                         f"{pct(final['after']['ece'])} after recalibration.{uncertainty}")
+        elif best and recal.get("helps"):
             notes.append(f"{best['label']} (cross-fitted) lowers ECE from {pct(recal['before']['ece'])} to "
                          f"{pct(best['ece'])} and log loss from {recal['before']['log_loss']:.3f} to "
-                         f"{best['log_loss']:.3f}. Worth applying before trusting the scores.")
+                         f"{best['log_loss']:.3f}. This is candidate-selection evidence, not a final performance "
+                         "claim; reserve a final evaluation partition to make that claim.")
         elif best:
-            notes.append("Recalibration does not clearly help on held-out rows, so the raw scores are about as good as "
-                         "they get without retraining.")
+            notes.append("Recalibration does not clearly help in the cross-fitted candidate comparison. This is "
+                         "selection evidence, not a final performance claim.")
     elif recal and recal.get("skipped"):
         notes.append(recal["skipped"])
 

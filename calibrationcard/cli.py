@@ -12,10 +12,11 @@ from calibrationcard.analysis import analyze, headline_numbers
 from calibrationcard.demo import synthetic_predictions
 from calibrationcard.loader import PredictionsError, load_predictions
 from calibrationcard.recalibrate import METHODS
+from calibrationcard.reliability_study import run_grade_reliability_study
 from calibrationcard.report import PdfUnavailable, html_to_pdf, render_html
 from calibrationcard.server import serve
 
-COMMANDS = {"serve", "grade", "demo", "-h", "--help", "--version"}
+COMMANDS = {"serve", "grade", "demo", "study", "-h", "--help", "--version"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,6 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     gp.add_argument("--seed", type=int, default=0)
     gp.add_argument("--no-recalibration", action="store_true")
     gp.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
+    gp.add_argument("--final-evaluation-fraction", type=float,
+                    help="Reserve this stratified fraction (0.10–0.50) for an untouched final evaluation")
     gp.add_argument("--name", help="Title for the report (defaults to the file name)")
     gp.add_argument("--html", type=Path, help="Write the report card as HTML")
     gp.add_argument("--pdf", type=Path, help="Write the report card as PDF (needs Chrome, Chromium or Edge)")
@@ -47,6 +50,11 @@ def main(argv: list[str] | None = None) -> int:
 
     dp = sub.add_parser("demo", help="Write a synthetic predictions CSV to try the tool")
     dp.add_argument("out", type=Path)
+
+    study = sub.add_parser("study", help="Write a synthetic grade-reliability study (no uploaded data)")
+    study.add_argument("out", type=Path)
+    study.add_argument("--trials", type=int, default=20)
+    study.add_argument("--seed", type=int, default=0)
 
     args = parser.parse_args(argv)
     if args.command == "serve":
@@ -56,13 +64,30 @@ def main(argv: list[str] | None = None) -> int:
         synthetic_predictions().to_csv(args.out, index=False)
         print(f"Wrote {args.out}")
         return 0
+    if args.command == "study":
+        try:
+            study = run_grade_reliability_study(trials=args.trials, seed=args.seed)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        args.out.write_text(json.dumps(study, indent=2), encoding="utf-8")
+        print(f"Wrote synthetic grade-reliability study: {args.out}")
+        return 0
     try:
         pred = load_predictions(args.csv, label=args.label, prob_columns=args.prob_cols, positive=args.positive)
     except PredictionsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
-    result = analyze(pred, name=args.name or args.csv.name, n_bins=args.bins, seed=args.seed,
-                     recalibrate=not args.no_recalibration, methods=args.methods)
+    if args.final_evaluation_fraction is not None and args.no_recalibration:
+        print("Error: --final-evaluation-fraction needs recalibration enabled.", file=sys.stderr)
+        return 2
+    try:
+        result = analyze(pred, name=args.name or args.csv.name, n_bins=args.bins, seed=args.seed,
+                         recalibrate=not args.no_recalibration, methods=args.methods,
+                         final_evaluation_fraction=args.final_evaluation_fraction)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
     head = headline_numbers(result)
     print(f"{head['name']}: grade {head['grade']} · ECE {head['ece']:.2%} · Brier {head['brier']:.4f} · "
           f"log loss {head['log_loss']:.4f} · accuracy {head['accuracy']:.1%} · {head['rows']} rows")
