@@ -3,13 +3,15 @@ import threading
 import urllib.request
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from calibrationcard import HOST
 from calibrationcard.app import create_app
 from calibrationcard.cli import main
 from calibrationcard.demo import synthetic_binary
-from calibrationcard.report import find_browser
+from calibrationcard.report import find_browser, grade_color
 from calibrationcard.server import make_bound_server
 
 
@@ -60,6 +62,42 @@ def test_demo_route(tmp_path):
 def test_web_incomplete_grade_has_a_neutral_color_mapping():
     script = (Path(__file__).resolve().parents[1] / "calibrationcard" / "web" / "app.js").read_text(encoding="utf-8")
     assert 'I: "#5e6b78"' in script
+    assert 'g.setAttribute("aria-label", `Grade ${h.grade}: ${headline}`)' in script
+    assert grade_color("I") == "#5e6b78"
+
+
+def test_incomplete_transitions_stay_neutral_across_api_json_and_html(tmp_path):
+    """Each result is independent; a prior grade cannot leak into an Incomplete report."""
+    client = create_app(data_dir=tmp_path).test_client()
+    rng = np.random.default_rng(5)
+    calibrated_scores = rng.random(4000)
+    cases = [
+        ("f", pd.DataFrame({"y": [0, 1] * 100, "score": [0.35, 0.65] * 100}), "F"),
+        ("i", pd.DataFrame({"y": [0, 1] * 30, "score": [0.1, 0.9] * 30}), "I"),
+        ("a", pd.DataFrame({"y": (rng.random(4000) < calibrated_scores).astype(int), "score": calibrated_scores}), "A"),
+    ]
+    seen = []
+    for name, frame, expected in cases:
+        path = tmp_path / f"{name}.csv"
+        frame.to_csv(path, index=False)
+        upload = client.post("/api/upload", json={"path": str(path)}).get_json()
+        response = client.post("/api/analyze", json={
+            "upload_id": upload["upload_id"], "label": "y", "prob_columns": ["score"], "recalibrate": False,
+        })
+        assert response.status_code == 200, response.get_json()
+        result = response.get_json()
+        assert result["headline"]["grade"].startswith(expected)
+        result_id = result["result_id"]
+        exported = client.get(f"/api/report/{result_id}.json").get_json()
+        html = client.get(f"/api/report/{result_id}.html").get_data(as_text=True)
+        assert exported["grade"]["letter"].startswith(expected)
+        assert f'aria-label="Grade {exported["grade"]["letter"]}"' in html
+        if expected == "I":
+            assert exported["grade"]["headline"] == "Incomplete: not enough evidence to grade"
+            assert "border: 6px solid #5e6b78" in html
+            assert "I = not enough evidence" in html
+        seen.append(result_id)
+    assert len(set(seen)) == len(cases)
 
 
 @pytest.mark.skipif(find_browser() is None, reason="needs Chrome, Chromium or Edge for PDF")

@@ -51,7 +51,10 @@ async function grade() {
     const g = $("#grade-letter");
     g.textContent = h.grade;
     g.style.color = g.style.borderColor = COLORS[h.grade[0]];
-    $("#headline").textContent = r.result.grade.headline;
+    const headline = r.result.grade.headline;
+    g.setAttribute("aria-label", `Grade ${h.grade}: ${headline}`);
+    g.title = `Grade ${h.grade}: ${headline}`;
+    $("#headline").textContent = headline;
     const pct = (x) => (x * 100).toFixed(1) + "%";
     $("#numbers").innerHTML = [["ECE", pct(h.ece)], ["Brier", h.brier.toFixed(4)], ["Log loss", h.log_loss.toFixed(4)],
       ["Accuracy", pct(h.accuracy)], ["Rows", h.rows.toLocaleString()]].map(([k, v]) => `<div><b>${v}</b>${k}</div>`).join("");
